@@ -1,0 +1,404 @@
+// WordPress 2025 Optimized Prisma Schema
+// Designed for high performance and scalability
+// Compatible with WordPress core database structure
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// CORE WORDPRESS TABLES
+// ============================================================================
+
+// Users table - stores all user information
+model User {
+  id                 BigInt    @id @default(autoincrement()) @map("ID")
+  user_login         String    @unique @map("user_login") @db.VarChar(60)
+  user_pass          String    @map("user_pass") @db.VarChar(255)
+  user_nicename      String    @map("user_nicename") @db.VarChar(50)
+  user_email         String    @map("user_email") @db.VarChar(100)
+  user_url           String    @map("user_url") @db.VarChar(100)
+  user_registered    DateTime  @default(now()) @map("user_registered")
+  user_activation_key String?  @map("user_activation_key") @db.VarChar(255)
+  user_status        Int       @default(0) @map("user_status")
+  display_name       String    @map("display_name") @db.VarChar(250)
+
+  // Multisite fields
+  spam               Boolean   @default(false)
+  deleted            Boolean   @default(false)
+
+  // Relations
+  posts              Post[]
+  comments           Comment[]
+  user_meta          UserMeta[]
+
+  // Indexes for performance
+  @@index([user_login], name: "user_login_key")
+  @@index([user_nicename], name: "user_nicename")
+  @@index([user_email], name: "user_email")
+  @@map("wp_users")
+}
+
+// User metadata table
+model UserMeta {
+  umeta_id   BigInt  @id @default(autoincrement()) @map("umeta_id")
+  user_id    BigInt  @map("user_id")
+  meta_key   String? @map("meta_key") @db.VarChar(255)
+  meta_value String? @map("meta_value") @db.Text
+
+  // Relations
+  user       User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  // Indexes for performance
+  @@index([user_id], name: "usermeta_user_id")
+  @@index([meta_key], name: "usermeta_meta_key")
+  @@unique([user_id, meta_key], name: "userId_metaKey")
+  @@map("wp_usermeta")
+}
+
+// Posts table - core content storage
+model Post {
+  id                    BigInt    @id @default(autoincrement()) @map("ID")
+  post_author           BigInt    @default(0) @map("post_author")
+  post_date             DateTime  @default(now()) @map("post_date")
+  post_date_gmt         DateTime  @default(now()) @map("post_date_gmt")
+  post_content          String    @map("post_content") @db.Text
+  post_title            String    @map("post_title") @db.Text
+  post_excerpt          String    @map("post_excerpt") @db.Text
+  post_status           String    @default("publish") @map("post_status") @db.VarChar(20)
+  comment_status        String    @default("open") @map("comment_status") @db.VarChar(20)
+  ping_status           String    @default("open") @map("ping_status") @db.VarChar(20)
+  post_password         String    @map("post_password") @db.VarChar(255)
+  post_name             String    @map("post_name") @db.VarChar(200)
+  to_ping               String    @map("to_ping") @db.Text
+  pinged                String    @map("pinged") @db.Text
+  post_modified         DateTime  @default(now()) @map("post_modified")
+  post_modified_gmt     DateTime  @default(now()) @map("post_modified_gmt")
+  post_content_filtered String    @map("post_content_filtered") @db.Text
+  post_parent           BigInt    @default(0) @map("post_parent")
+  guid                  String    @map("guid") @db.VarChar(255)
+  menu_order            Int       @default(0) @map("menu_order")
+  post_type             String    @default("post") @map("post_type") @db.VarChar(20)
+  post_mime_type        String    @map("post_mime_type") @db.VarChar(100)
+  comment_count         BigInt    @default(0) @map("comment_count")
+
+  // Relations
+  author                User      @relation(fields: [post_author], references: [id])
+  parent                Post?     @relation("PostHierarchy", fields: [post_parent], references: [id])
+  children              Post[]    @relation("PostHierarchy")
+  comments              Comment[]
+  post_meta             PostMeta[]
+  term_relationships    TermRelationship[]
+
+  // Indexes for performance optimization
+  @@index([post_author], name: "post_author")
+  @@index([post_type, post_status, post_date, id], name: "type_status_date")
+  @@index([post_parent], name: "post_parent")
+  @@index([post_name], name: "post_name")
+  @@index([post_date], name: "post_date")
+  @@index([post_status], name: "post_status")
+  @@map("wp_posts")
+}
+
+// Post metadata table
+model PostMeta {
+  meta_id    BigInt  @id @default(autoincrement()) @map("meta_id")
+  post_id    BigInt  @map("post_id")
+  meta_key   String? @map("meta_key") @db.VarChar(255)
+  meta_value String? @map("meta_value") @db.Text
+
+  // Relations
+  post       Post    @relation(fields: [post_id], references: [id], onDelete: Cascade)
+
+  // Indexes for performance
+  @@index([post_id], name: "postmeta_post_id")
+  @@index([meta_key], name: "postmeta_meta_key")
+  @@index([meta_key, meta_value], name: "postmeta_meta_key_value")
+  @@unique([post_id, meta_key], name: "postId_metaKey")
+  @@map("wp_postmeta")
+}
+
+// Comments table
+model Comment {
+  comment_id           BigInt    @id @default(autoincrement()) @map("comment_ID")
+  comment_post_id      BigInt    @map("comment_post_ID")
+  comment_author       String    @map("comment_author") @db.Text
+  comment_author_email String    @map("comment_author_email") @db.VarChar(100)
+  comment_author_url   String    @map("comment_author_url") @db.VarChar(200)
+  comment_author_ip    String    @map("comment_author_IP") @db.VarChar(100)
+  comment_date         DateTime  @default(now()) @map("comment_date")
+  comment_date_gmt     DateTime  @default(now()) @map("comment_date_gmt")
+  comment_content      String    @map("comment_content") @db.Text
+  comment_karma        Int       @default(0) @map("comment_karma")
+  comment_approved     String    @default("1") @map("comment_approved") @db.VarChar(20)
+  comment_agent        String    @map("comment_agent") @db.VarChar(255)
+  comment_type         String    @default("comment") @map("comment_type") @db.VarChar(20)
+  comment_parent       BigInt    @default(0) @map("comment_parent")
+  user_id              BigInt    @default(0) @map("user_id")
+
+  // Relations
+  post               Post      @relation(fields: [comment_post_id], references: [id], onDelete: Cascade)
+  user               User?     @relation(fields: [user_id], references: [id])
+  parent             Comment?  @relation("CommentHierarchy", fields: [comment_parent], references: [comment_id])
+  children           Comment[] @relation("CommentHierarchy")
+  comment_meta       CommentMeta[]
+
+  // Indexes for performance
+  @@index([comment_post_id], name: "comment_post_ID")
+  @@index([comment_approved, comment_date_gmt], name: "comment_approved_date_gmt")
+  @@index([comment_date_gmt], name: "comment_date_gmt")
+  @@index([comment_parent], name: "comment_parent")
+  @@index([comment_author_email], name: "comment_author_email")
+  @@map("wp_comments")
+}
+
+// Comment metadata table
+model CommentMeta {
+  meta_id    BigInt  @id @default(autoincrement()) @map("meta_id")
+  comment_id BigInt  @map("comment_id")
+  meta_key   String? @map("meta_key") @db.VarChar(255)
+  meta_value String? @map("meta_value") @db.Text
+
+  // Relations
+  comment    Comment @relation(fields: [comment_id], references: [comment_id], onDelete: Cascade)
+
+  // Indexes for performance
+  @@index([comment_id], name: "commentmeta_comment_id")
+  @@index([meta_key], name: "commentmeta_meta_key")
+  @@map("wp_commentmeta")
+}
+
+// ============================================================================
+// TAXONOMY SYSTEM
+// ============================================================================
+
+// Terms table - stores taxonomy terms (categories, tags, etc.)
+model Term {
+  term_id    BigInt @id @default(autoincrement()) @map("term_id")
+  name       String @map("name") @db.VarChar(200)
+  slug       String @map("slug") @db.VarChar(200)
+  term_group BigInt @default(0) @map("term_group")
+
+  // Relations
+  term_taxonomy TermTaxonomy[]
+  term_meta     TermMeta[]
+
+  // Indexes for performance
+  @@index([slug], name: "slug")
+  @@index([name], name: "name")
+  @@map("wp_terms")
+}
+
+// Term taxonomy table - defines the taxonomy for terms
+model TermTaxonomy {
+  term_taxonomy_id BigInt @id @default(autoincrement()) @map("term_taxonomy_id")
+  term_id          BigInt @map("term_id")
+  taxonomy         String @map("taxonomy") @db.VarChar(32)
+  description      String @map("description") @db.Text
+  parent           BigInt @default(0) @map("parent")
+  count            BigInt @default(0) @map("count")
+
+  // Relations
+  term             Term   @relation(fields: [term_id], references: [term_id], onDelete: Cascade)
+  parent_term      TermTaxonomy? @relation("TaxonomyHierarchy", fields: [parent], references: [term_taxonomy_id])
+  children         TermTaxonomy[] @relation("TaxonomyHierarchy")
+  term_relationships TermRelationship[]
+
+  // Indexes for performance
+  @@unique([term_id, taxonomy], name: "term_id_taxonomy")
+  @@index([taxonomy], name: "taxonomy")
+  @@map("wp_term_taxonomy")
+}
+
+// Term relationships table - links posts to terms
+model TermRelationship {
+  object_id        BigInt @map("object_id")
+  term_taxonomy_id BigInt @map("term_taxonomy_id")
+  term_order       Int    @default(0) @map("term_order")
+
+  // Relations
+  post             Post         @relation(fields: [object_id], references: [id], onDelete: Cascade)
+  term_taxonomy    TermTaxonomy @relation(fields: [term_taxonomy_id], references: [term_taxonomy_id], onDelete: Cascade)
+
+  // Composite primary key
+  @@id([object_id, term_taxonomy_id])
+  @@index([term_taxonomy_id], name: "term_taxonomy_id")
+  @@map("wp_term_relationships")
+}
+
+// Term metadata table
+model TermMeta {
+  meta_id    BigInt  @id @default(autoincrement()) @map("meta_id")
+  term_id    BigInt  @map("term_id")
+  meta_key   String? @map("meta_key") @db.VarChar(255)
+  meta_value String? @map("meta_value") @db.Text
+
+  // Relations
+  term       Term    @relation(fields: [term_id], references: [term_id], onDelete: Cascade)
+
+  // Indexes for performance
+  @@index([term_id], name: "termmeta_term_id")
+  @@index([meta_key], name: "termmeta_meta_key")
+  @@map("wp_termmeta")
+}
+
+// ============================================================================
+// CONFIGURATION AND SETTINGS
+// ============================================================================
+
+// Options table - stores WordPress configuration and settings
+model Option {
+  option_id    BigInt  @id @default(autoincrement()) @map("option_id")
+  option_name  String  @unique @map("option_name") @db.VarChar(191)
+  option_value String  @map("option_value") @db.Text
+  autoload     String  @default("yes") @map("autoload") @db.VarChar(20)
+
+  // Indexes for performance
+  @@index([autoload], name: "autoload")
+  @@map("wp_options")
+}
+
+// ============================================================================
+// MULTISITE TABLES (WordPress Network)
+// ============================================================================
+
+// Sites table for multisite network
+model Site {
+  id       BigInt @id @default(autoincrement())
+  domain   String @map("domain") @db.VarChar(200)
+  path     String @map("path") @db.VarChar(100)
+
+  // Relations
+  blogs    Blog[]
+
+  // Indexes for performance
+  @@index([domain, path], name: "site_domain_path")
+  @@map("wp_site")
+}
+
+// Blogs table for multisite network
+model Blog {
+  blog_id      BigInt    @id @default(autoincrement()) @map("blog_id")
+  site_id      BigInt    @default(1) @map("site_id")
+  domain       String    @map("domain") @db.VarChar(200)
+  path         String    @map("path") @db.VarChar(100)
+  registered   DateTime  @default(now()) @map("registered")
+  last_updated DateTime  @default(now()) @map("last_updated")
+  public       Boolean   @default(true) @map("public")
+  archived     Boolean   @default(false) @map("archived")
+  mature       Boolean   @default(false) @map("mature")
+  spam         Boolean   @default(false) @map("spam")
+  deleted      Boolean   @default(false) @map("deleted")
+  lang_id      Int       @default(0) @map("lang_id")
+
+  // Relations
+  site         Site      @relation(fields: [site_id], references: [id])
+
+  // Indexes for performance
+  @@index([domain, path], name: "blog_domain_path")
+  @@index([lang_id], name: "blog_lang_id")
+  @@map("wp_blogs")
+}
+
+// Site metadata for multisite
+model SiteMeta {
+  meta_id    BigInt  @id @default(autoincrement()) @map("meta_id")
+  site_id    BigInt  @map("site_id")
+  meta_key   String? @map("meta_key") @db.VarChar(255)
+  meta_value String? @map("meta_value") @db.Text
+
+  // Indexes for performance
+  @@index([site_id], name: "sitemeta_site_id")
+  @@index([meta_key], name: "sitemeta_meta_key")
+  @@map("wp_sitemeta")
+}
+
+// ============================================================================
+// MODERN WORDPRESS 2025 ENHANCEMENTS
+// ============================================================================
+
+// Links table (legacy but still used by some plugins)
+model Link {
+  link_id          BigInt    @id @default(autoincrement()) @map("link_id")
+  link_url         String    @map("link_url") @db.VarChar(255)
+  link_name        String    @map("link_name") @db.VarChar(255)
+  link_image       String    @map("link_image") @db.VarChar(255)
+  link_target      String    @default("") @map("link_target") @db.VarChar(25)
+  link_description String    @map("link_description") @db.VarChar(255)
+  link_visible     String    @default("Y") @map("link_visible") @db.VarChar(20)
+  link_owner       BigInt    @default(1) @map("link_owner")
+  link_rating      Int       @default(0) @map("link_rating")
+  link_updated     DateTime  @default(now()) @map("link_updated")
+  link_rel         String    @map("link_rel") @db.VarChar(255)
+  link_notes       String    @map("link_notes") @db.Text
+  link_rss         String    @map("link_rss") @db.VarChar(255)
+
+  // Indexes for performance
+  @@index([link_visible], name: "link_visible")
+  @@map("wp_links")
+}
+
+// ============================================================================
+// PERFORMANCE OPTIMIZATION VIEWS AND MATERIALIZED TABLES
+// ============================================================================
+
+// Cached post counts for better performance
+model PostCount {
+  id           BigInt   @id @default(autoincrement())
+  post_type    String   @db.VarChar(20)
+  post_status  String   @db.VarChar(20)
+  count        BigInt   @default(0)
+  last_updated DateTime @default(now())
+
+  @@unique([post_type, post_status])
+  @@map("wp_post_counts")
+}
+
+// Cached term counts for better performance
+model TermCount {
+  id           BigInt   @id @default(autoincrement())
+  taxonomy     String   @db.VarChar(32)
+  count        BigInt   @default(0)
+  last_updated DateTime @default(now())
+
+  @@unique([taxonomy])
+  @@map("wp_term_counts")
+}
+
+// ============================================================================
+// ENUMS FOR TYPE SAFETY
+// ============================================================================
+
+enum PostStatus {
+  publish
+  future
+  draft
+  pending
+  private
+  trash
+  auto_draft
+  inherit
+}
+
+enum CommentStatus {
+  open
+  closed
+}
+
+enum PingStatus {
+  open
+  closed
+}
+
+enum CommentApproved {
+  approved @map("1")
+  pending  @map("0")
+  spam     @map("spam")
+  trash    @map("trash")
+}
